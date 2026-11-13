@@ -65,6 +65,84 @@ const setAvailability = async (req, res, next) => {
 
 
 
+// Controller to update the timing of an existing FREE availability slot (NEW API).
+// The slot document stays in the database - only its startTime/endTime are changed.
+const updateAvailability = async (req, res, next) => {
+  try {
+    const { slotId } = req.params;
+    const { startTime, endTime } = req.body;
+    const professorId = req.user.id;
+
+    if (!mongoose.Types.ObjectId.isValid(slotId)) {
+      return next(new HttpError("Invalid slot ID format", 400));
+    }
+
+    if (!startTime || !endTime) {
+      return next(new HttpError("startTime and endTime are required", 400));
+    }
+
+    const newStart = new Date(startTime);
+    const newEnd = new Date(endTime);
+
+    if (isNaN(newStart.getTime()) || isNaN(newEnd.getTime())) {
+      return next(new HttpError("Invalid date format for startTime or endTime", 400));
+    }
+
+    if (newStart >= newEnd) {
+      return next(new HttpError("Start time must be before end time", 400));
+    }
+
+    // The slot must exist AND belong to the logged-in professor
+    const slot = await Availability.findOne({ _id: slotId, professorId });
+    if (!slot) {
+      return next(new HttpError("Availability slot not found for this professor", 404));
+    }
+
+    // Only FREE slots can be updated: reject if a student has a booked appointment inside this slot
+    const bookedAppointment = await Appointment.findOne({
+      professorId,
+      status: "booked",
+      time: { $gte: slot.startTime, $lte: slot.endTime },
+    });
+    if (bookedAppointment) {
+      return next(new HttpError("This slot already has a booked appointment, so it cannot be updated. Cancel the appointment first.", 409));
+    }
+
+    // The new timing must not overlap any OTHER slot of this professor
+    const overlappingSlot = await Availability.findOne({
+      _id: { $ne: slotId },
+      professorId,
+      startTime: { $lt: newEnd },
+      endTime: { $gt: newStart },
+    });
+    if (overlappingSlot) {
+      return next(new HttpError("New timing overlaps with another availability slot of yours", 400));
+    }
+
+    const updatedSlot = await Availability.findOneAndUpdate(
+      { _id: slotId, professorId },
+      { startTime: newStart, endTime: newEnd },
+      { new: true, runValidators: true }
+    );
+
+    res.status(200).json({
+      message: "Availability updated successfully",
+      previous: {
+        startTime: moment.utc(slot.startTime).format('MMMM Do YYYY, h:mm:ss a'),
+        endTime: moment.utc(slot.endTime).format('MMMM Do YYYY, h:mm:ss a'),
+      },
+      availability: {
+        ...updatedSlot.toObject(),
+        startTime: moment.utc(updatedSlot.startTime).format('MMMM Do YYYY, h:mm:ss a'),
+        endTime: moment.utc(updatedSlot.endTime).format('MMMM Do YYYY, h:mm:ss a'),
+      },
+    });
+  } catch (error) {
+    console.error("Error updating availability:", error);
+    return next(new HttpError("Updating availability failed", 500));
+  }
+};
+
   const cancelAppointments = async(req,res,next) => {
     try {
       const { studentId } = req.params;  // Student's ID from params
@@ -95,7 +173,7 @@ const setAvailability = async (req, res, next) => {
           professorId: new mongoose.Types.ObjectId(professorId),
           status: 'booked'
         },
-        { status: 'canceled' }  //  the status  needs to be canceled
+        { status: 'cancelled' }  //  must match the enum in models/appointment.js
       );
   
       res.status(200).json({
@@ -107,4 +185,4 @@ const setAvailability = async (req, res, next) => {
       return next(new HttpError(error));
     }
   };
-export {setAvailability, cancelAppointments};
+export {setAvailability, updateAvailability, cancelAppointments};

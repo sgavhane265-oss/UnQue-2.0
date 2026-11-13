@@ -26,11 +26,30 @@ app.use(cors());
 app.use('/users', userRoutes);
 app.use('/professor',professorRoutes);
 app.use('/general', generalRoutes);
+// Simple health check - handy to confirm the EC2 server is reachable and connected to the DB
+app.get('/health', (req, res) => {
+    res.status(200).json({
+        status: "ok",
+        db: mongoose.connection.readyState === 1 ? "connected" : "not connected"
+    });
+});
 app.use(notFound)
 app.use(errorMiddleware)
 const PORT = process.env.PORT  || 5001;
-mongoose.connect(process.env.MONGO_URL, {
-}).then(() => {
-    app.listen(PORT, () => console.log(`Server Port: ${PORT}`));  
-}).catch((error) => console.log(`${error} did not connect`)); 
 
+if (!process.env.MONGO_URL || !process.env.JWT_SECRET) {
+    console.log("MONGO_URL and JWT_SECRET must be set (see .env.example)");
+    process.exit(1);
+}
+
+// For Amazon DocumentDB the TLS / replica-set options live in the MONGO_URL itself.
+// (DocumentDB does not support retryable writes, so retryWrites=false is required.)
+mongoose.connect(process.env.MONGO_URL, {
+    serverSelectionTimeoutMS: 10000, // fail fast with a clear error if the DB is unreachable
+}).then(() => {
+    console.log("Connected to database");
+    app.listen(PORT, () => console.log(`Server Port: ${PORT}`));  
+}).catch((error) => {
+    console.log(`${error} did not connect`);
+    process.exit(1);
+});
