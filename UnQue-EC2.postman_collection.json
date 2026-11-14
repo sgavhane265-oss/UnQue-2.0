@@ -1,0 +1,862 @@
+{
+  "info": {
+    "name": "UnQue - EC2 + DocumentDB demo flow",
+    "description": "Runs the 10-step user flow from the assignment against the API on EC2.\n1) Set the collection variable baseUrl to http://<EC2_PUBLIC_IP>:3000\n2) Run the requests top to bottom (folder 0 = one-time setup, folder 1 = the 10 steps).\nDemo times are generated automatically (a random future day) so you can re-run the flow without slot clashes.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Generate demo times once (random future day, UTC) so re-runs never overlap old slots.",
+          "if (!pm.collectionVariables.get('t1')) {",
+          "  const d = new Date(); d.setUTCDate(d.getUTCDate() + 30 + Math.floor(Math.random() * 300));",
+          "  const at = (h, m) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), h, m)).toISOString();",
+          "  const set = (k, v) => pm.collectionVariables.set(k, v);",
+          "  set('slot1Start', at(10, 0)); set('slot1End', at(11, 0)); set('t1', at(10, 30));   // slot for A1 booking (T1)",
+          "  set('slot2Start', at(12, 0)); set('slot2End', at(13, 0)); set('t2', at(12, 30));   // slot for A2 booking (T2)",
+          "  set('slot3Start', at(14, 0)); set('slot3End', at(15, 0));                          // free slot ...",
+          "  set('slot3NewStart', at(16, 0)); set('slot3NewEnd', at(17, 0));                    // ... moved to this timing in step 8",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://YOUR_EC2_PUBLIC_IP:3000"
+    },
+    {
+      "key": "password",
+      "value": "Demo@1234"
+    },
+    {
+      "key": "A1Email",
+      "value": "student.a1@college.edu"
+    },
+    {
+      "key": "A2Email",
+      "value": "student.a2@college.edu"
+    },
+    {
+      "key": "P1Email",
+      "value": "prof.p1@college.edu"
+    }
+  ],
+  "item": [
+    {
+      "name": "0. One-time setup (register users + health check)",
+      "item": [
+        {
+          "name": "Health check (server up + DB connected)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"db connected\", () => pm.expect(pm.response.json().db).to.eql(\"connected\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Register Student A1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"registered (201) or already exists (422)\", () => pm.expect([201, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Student A1\",\n  \"email\": \"{{A1Email}}\",\n  \"password\": \"{{password}}\",\n  \"confirmPassword\": \"{{password}}\",\n  \"role\": \"student\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Register Student A2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"registered (201) or already exists (422)\", () => pm.expect([201, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Student A2\",\n  \"email\": \"{{A2Email}}\",\n  \"password\": \"{{password}}\",\n  \"confirmPassword\": \"{{password}}\",\n  \"role\": \"student\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Register Professor P1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"registered (201) or already exists (422)\", () => pm.expect([201, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Professor P1\",\n  \"email\": \"{{P1Email}}\",\n  \"password\": \"{{password}}\",\n  \"confirmPassword\": \"{{password}}\",\n  \"role\": \"professor\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "1. The 10-step flow",
+      "item": [
+        {
+          "name": "Step 1 - Student A1 authenticates",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"login OK (200)\", () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set(\"tokenA1\", j.token);",
+                  "pm.collectionVariables.set(\"idA1\", j.id);",
+                  "console.log(\"Student A1 logged in, id:\", j.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{A1Email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 2 - Professor P1 authenticates",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"login OK (200)\", () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set(\"tokenP1\", j.token);",
+                  "pm.collectionVariables.set(\"idP1\", j.id);",
+                  "console.log(\"Professor P1 logged in, id:\", j.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{P1Email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 3a - P1 adds free slot #1 (will hold T1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"slot added (201)\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenP1}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startTime\": \"{{slot1Start}}\",\n  \"endTime\": \"{{slot1End}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/professor/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professor",
+                "availability"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 3b - P1 adds free slot #2 (will hold T2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"slot added (201)\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"slot2Id\", pm.response.json().availability._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenP1}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startTime\": \"{{slot2Start}}\",\n  \"endTime\": \"{{slot2End}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/professor/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professor",
+                "availability"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 3c - P1 adds free slot #3 (stays free, updated in step 8)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"slot added (201)\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"slot3Id\", pm.response.json().availability._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenP1}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startTime\": \"{{slot3Start}}\",\n  \"endTime\": \"{{slot3End}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/professor/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professor",
+                "availability"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 4 - A1 views P1's available slots",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA1}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/general/professor/{{idP1}}/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "general",
+                "professor",
+                "{{idP1}}",
+                "availability"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 5 - A1 books appointment with P1 at T1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"booked (201)\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA1}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"professorId\": \"{{idP1}}\",\n  \"time\": \"{{t1}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/general/book",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "general",
+                "book"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 6 - Student A2 authenticates",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"login OK (200)\", () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set(\"tokenA2\", j.token);",
+                  "pm.collectionVariables.set(\"idA2\", j.id);",
+                  "console.log(\"Student A2 logged in, id:\", j.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{A2Email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 7 - A2 books appointment with P1 at T2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"booked (201)\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA2}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"professorId\": \"{{idP1}}\",\n  \"time\": \"{{t2}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/general/book",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "general",
+                "book"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 8 - P1 updates timing of a free slot (NEW API)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"slot updated (200)\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"same slot id kept\", () => pm.expect(pm.response.json().availability._id).to.eql(pm.collectionVariables.get(\"slot3Id\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenP1}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startTime\": \"{{slot3NewStart}}\",\n  \"endTime\": \"{{slot3NewEnd}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/professor/availability/{{slot3Id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professor",
+                "availability",
+                "{{slot3Id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 9 - P1 cancels the appointment with Student A1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"cancelled (200)\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenP1}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professor/cancel-appointments/{{idA1}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professor",
+                "cancel-appointments",
+                "{{idA1}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Step 10 - A1 checks appointments (none pending)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"no pending appointments (404)\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA1}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/general/appointments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "general",
+                "appointments"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Extra checks (optional, nice for the video)",
+      "item": [
+        {
+          "name": "A2 still has their appointment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA2}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/general/appointments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "general",
+                "appointments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Try to update slot #2 that still has A2's booking (expect 409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"rejected because slot is booked (409)\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenP1}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startTime\": \"{{slot3NewStart}}\",\n  \"endTime\": \"{{slot3NewEnd}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/professor/availability/{{slot2Id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professor",
+                "availability",
+                "{{slot2Id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
